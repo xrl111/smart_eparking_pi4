@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Smart E-Parking{% endblock %}</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    {% if current_user.is_authenticated %}
+    <nav style="background: white; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 24px;">
+      <div class="container" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <strong>Smart E-Parking</strong>
+          {% if current_user.is_admin() %}
+            <span style="background: #3b82f6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; margin-left: 8px;">ADMIN</span>
+          {% else %}
+            <span style="background: #6b7280; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; margin-left: 8px;">CLIENT</span>
+          {% endif %}
+        </div>
+        <div style="display: flex; gap: 16px; align-items: center;">
+          <span>Xin chào, <strong>{{ current_user.full_name or current_user.username }}</strong></span>
+          {% if current_user.is_admin() %}
+            <a href="{{ url_for('main.admin_users') }}" style="text-decoration: none; color: #3b82f6;">Quản lý người dùng</a>
+            <a href="{{ url_for('main.admin_logs') }}" style="text-decoration: none; color: #3b82f6;">Nhật ký hệ thống</a>
+            <a href="{{ url_for('main.admin_pricing') }}" style="text-decoration: none; color: #3b82f6;">Quản lý bảng giá</a>
+          {% endif %}
+          <a href="{{ url_for('auth.logout') }}" style="text-decoration: none; color: #ef4444;">Đăng xuất</a>
+        </div>
+      </div>
+    </nav>
+    {% endif %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="container">
+          {% for category, message in messages %}
+            <div class="toast {{ category }}" style="position: relative; margin-bottom: 8px;">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+  </body>
+</html>
+

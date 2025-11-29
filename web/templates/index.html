@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart E-Parking Dashboard</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>🚗 Smart E-Parking System</h1>
+        <p>Hệ thống quản lý bãi đỗ xe thông minh - Real-time Monitoring</p>
+        <div class="system-status" id="system-status">
+          <span class="status-indicator" id="status-indicator"></span>
+          <span id="status-text">Đang kết nối...</span>
+        </div>
+      </header>
+
+      <section class="stats">
+        <div class="stat-card">
+          <span class="label">Tổng chỗ đỗ</span>
+          <strong id="total-slots">{{ total_slots }}</strong>
+        </div>
+        <div class="stat-card">
+          <span class="label">Chỗ trống</span>
+          <strong id="free-slots">0</strong>
+        </div>
+        <div class="stat-card">
+          <span class="label">Tỷ lệ sử dụng</span>
+          <strong id="usage-rate">0%</strong>
+        </div>
+        <div class="stat-card status-online" id="gate-status-card">
+          <span class="label">Trạng thái Barrier</span>
+          <strong id="gate-state">--</strong>
+        </div>
+        <div class="stat-card">
+          <span class="label">Cập nhật lần cuối</span>
+          <strong id="last-update" style="font-size: 1.2rem">--</strong>
+        </div>
+      </section>
+
+      <section>
+        <h2>📊 Danh sách chỗ đỗ</h2>
+        <div class="slots" id="slots">
+          <div
+            class="loading-container"
+            style="text-align: center; padding: 40px"
+          >
+            <div class="loading"></div>
+            <p>Đang tải dữ liệu...</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>🎛️ Điều khiển thủ công</h2>
+        <div class="manual-controls">
+          <div class="control-group">
+            <h3>Barrier Control</h3>
+            <button id="btn-gate-open" class="btn btn-success">
+              🔓 Mở Barrier
+            </button>
+            <button id="btn-gate-close" class="btn btn-danger">
+              🔒 Đóng Barrier
+            </button>
+          </div>
+          <div class="control-group">
+            <h3>Slot Management</h3>
+            <div id="slot-controls">
+              <p style="color: #6b7280; margin: 0">Đang tải...</p>
+            </div>
+          </div>
+          <div class="control-group">
+            <h3>System Test</h3>
+            <button id="btn-buzzer" class="btn btn-warning">
+              🔊 Test Buzzer
+            </button>
+            <button id="btn-refresh" class="btn btn-primary">🔄 Làm mới</button>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>📋 Thông báo hệ thống</h2>
+        <ul id="errors">
+          <li>Không có thông báo.</li>
+        </ul>
+      </section>
+    </main>
+
+    <div id="toast-container"></div>
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+  </body>
+</html>

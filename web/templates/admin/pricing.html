@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}Quản lý Bảng Giá - Smart E-Parking{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <h1 class="h3 mb-4 text-gray-800">💰 Quản lý Bảng Giá</h1>
+
+  <div class="row">
+    <div class="col-lg-12">
+      <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+          <h6 class="m-0 font-weight-bold text-primary">Danh sách Quy tắc Tính Giá</h6>
+          <button class="btn btn-primary btn-sm" onclick="showCreateModal()">
+            <i class="fas fa-plus"></i> Thêm Quy tắc
+          </button>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-bordered" id="pricingTable">
+              <thead>
+                <tr>
+                  <th>Tên</th>
+                  <th>Loại</th>
+                  <th>Khung giờ</th>
+                  <th>Giá</th>
+                  <th>Ưu tiên</th>
+                  <th>Trạng thái</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="pricingRulesBody">
+                <tr>
+                  <td colspan="7" class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="sr-only">Đang tải...</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Tạo/Cập nhật Pricing Rule -->
+<div class="modal fade" id="pricingModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalTitle">Thêm Quy tắc Tính Giá</h5>
+        <button type="button" class="close" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="pricingForm">
+          <input type="hidden" id="ruleId" name="rule_id">
+          
+          <div class="form-group">
+            <label>Tên quy tắc *</label>
+            <input type="text" class="form-control" id="ruleName" name="name" required>
+            <small class="form-text text-muted">Ví dụ: "Giờ cao điểm sáng", "Qua đêm"</small>
+          </div>
+
+          <div class="form-group">
+            <label>Loại quy tắc *</label>
+            <select class="form-control" id="ruleType" name="rule_type" required onchange="updateFormFields()">
+              <option value="per_hour">Theo giờ</option>
+              <option value="time_based">Theo khung giờ</option>
+              <option value="flat_rate">Đồng giá</option>
+              <option value="overnight">Qua đêm</option>
+              <option value="custom">Tùy chỉnh</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group" id="startHourGroup">
+                <label>Giờ bắt đầu</label>
+                <input type="number" class="form-control" id="startHour" name="start_hour" min="0" max="23">
+                <small class="form-text text-muted">0-23 (chỉ dùng cho "Theo khung giờ")</small>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group" id="endHourGroup">
+                <label>Giờ kết thúc</label>
+                <input type="number" class="form-control" id="endHour" name="end_hour" min="0" max="23">
+                <small class="form-text text-muted">0-23 (chỉ dùng cho "Theo khung giờ")</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" id="daysOfWeekGroup">
+            <label>Ngày trong tuần</label>
+            <input type="text" class="form-control" id="daysOfWeek" name="days_of_week" placeholder="0,1,2,3,4,5,6">
+            <small class="form-text text-muted">0=Thứ 2, 6=Chủ nhật. Để trống = tất cả ngày</small>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group" id="firstHourFeeGroup">
+                <label>Phí giờ đầu (VNĐ) *</label>
+                <input type="number" class="form-control" id="firstHourFee" name="first_hour_fee" min="0" required>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group" id="subsequentHourFeeGroup">
+                <label>Phí mỗi giờ tiếp theo (VNĐ) *</label>
+                <input type="number" class="form-control" id="subsequentHourFee" name="subsequent_hour_fee" min="0" required>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" id="flatRateFeeGroup" style="display: none;">
+            <label>Phí đồng giá (VNĐ)</label>
+            <input type="number" class="form-control" id="flatRateFee" name="flat_rate_fee" min="0">
+            <small class="form-text text-muted">Chỉ dùng cho "Đồng giá"</small>
+          </div>
+
+          <div class="form-group" id="overnightFeeGroup" style="display: none;">
+            <label>Phí qua đêm (VNĐ)</label>
+            <input type="number" class="form-control" id="overnightFee" name="overnight_fee" min="0">
+            <small class="form-text text-muted">Chỉ dùng cho "Qua đêm"</small>
+          </div>
+
+          <div class="form-group">
+            <label>Độ ưu tiên</label>
+            <input type="number" class="form-control" id="priority" name="priority" value="0" min="0">
+            <small class="form-text text-muted">Số càng cao càng ưu tiên (áp dụng trước)</small>
+          </div>
+
+          <div class="form-group">
+            <label>Mô tả</label>
+            <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+          </div>
+
+          <div class="form-group">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="isActive" name="is_active" checked>
+              <label class="form-check-label" for="isActive">Kích hoạt</label>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
+        <button type="button" class="btn btn-primary" onclick="savePricingRule()">Lưu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let pricingRules = [];
+
+function loadPricingRules() {
+  fetch('/api/pricing-rules')
+    .then(res => res.json())
+    .then(data => {
+      pricingRules = data.rules || [];
+      renderPricingRules();
+    })
+    .catch(err => {
+      console.error('Lỗi khi tải pricing rules:', err);
+      showToast('Lỗi khi tải danh sách quy tắc', 'error');
+    });
+}
+
+function renderPricingRules() {
+  const tbody = document.getElementById('pricingRulesBody');
+  if (pricingRules.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center">Chưa có quy tắc nào</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = pricingRules.map(rule => {
+    const timeRange = rule.start_hour !== null && rule.end_hour !== null
+      ? `${rule.start_hour}h - ${rule.end_hour}h`
+      : 'Tất cả';
+    
+    let priceText = '';
+    if (rule.rule_type === 'flat_rate') {
+      priceText = `${rule.flat_rate_fee?.toLocaleString('vi-VN') || 0} VNĐ (đồng giá)`;
+    } else if (rule.rule_type === 'overnight') {
+      priceText = `${rule.overnight_fee?.toLocaleString('vi-VN') || 0} VNĐ/đêm`;
+    } else {
+      priceText = `${rule.first_hour_fee?.toLocaleString('vi-VN') || 0} VNĐ (giờ đầu) + ${rule.subsequent_hour_fee?.toLocaleString('vi-VN') || 0} VNĐ/giờ`;
+    }
+
+    return `
+      <tr>
+        <td><strong>${rule.name}</strong></td>
+        <td>
+          <span class="badge badge-info">${getRuleTypeLabel(rule.rule_type)}</span>
+        </td>
+        <td>${timeRange}</td>
+        <td>${priceText}</td>
+        <td>${rule.priority}</td>
+        <td>
+          ${rule.is_active 
+            ? '<span class="badge badge-success">Hoạt động</span>'
+            : '<span class="badge badge-secondary">Tắt</span>'}
+        </td>
+        <td>
+          <button class="btn btn-sm btn-primary" onclick="editRule(${rule.id})">
+            <i class="fas fa-edit"></i>
+          </button>
+          <button class="btn btn-sm btn-danger" onclick="deleteRule(${rule.id})">
+            <i class="fas fa-trash"></i>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function getRuleTypeLabel(type) {
+  const labels = {
+    'per_hour': 'Theo giờ',
+    'time_based': 'Theo khung giờ',
+    'flat_rate': 'Đồng giá',
+    'overnight': 'Qua đêm',
+    'custom': 'Tùy chỉnh'
+  };
+  return labels[type] || type;
+}
+
+function showCreateModal() {
+  document.getElementById('modalTitle').textContent = 'Thêm Quy tắc Tính Giá';
+  document.getElementById('pricingForm').reset();
+  document.getElementById('ruleId').value = '';
+  document.getElementById('isActive').checked = true;
+  updateFormFields();
+  $('#pricingModal').modal('show');
+}
+
+function editRule(ruleId) {
+  const rule = pricingRules.find(r => r.id === ruleId);
+  if (!rule) return;
+
+  document.getElementById('modalTitle').textContent = 'Chỉnh sửa Quy tắc Tính Giá';
+  document.getElementById('ruleId').value = rule.id;
+  document.getElementById('ruleName').value = rule.name;
+  document.getElementById('ruleType').value = rule.rule_type;
+  document.getElementById('startHour').value = rule.start_hour || '';
+  document.getElementById('endHour').value = rule.end_hour || '';
+  document.getElementById('daysOfWeek').value = rule.days_of_week || '';
+  document.getElementById('firstHourFee').value = rule.first_hour_fee || 0;
+  document.getElementById('subsequentHourFee').value = rule.subsequent_hour_fee || 0;
+  document.getElementById('flatRateFee').value = rule.flat_rate_fee || 0;
+  document.getElementById('overnightFee').value = rule.overnight_fee || 0;
+  document.getElementById('priority').value = rule.priority || 0;
+  document.getElementById('description').value = rule.description || '';
+  document.getElementById('isActive').checked = rule.is_active;
+
+  updateFormFields();
+  $('#pricingModal').modal('show');
+}
+
+function updateFormFields() {
+  const ruleType = document.getElementById('ruleType').value;
+  
+  // Hiện/ẩn các field theo rule_type
+  const timeBasedFields = ['startHourGroup', 'endHourGroup', 'daysOfWeekGroup'];
+  const flatRateFields = ['flatRateFeeGroup'];
+  const overnightFields = ['overnightFeeGroup'];
+  const perHourFields = ['firstHourFeeGroup', 'subsequentHourFeeGroup'];
+
+  timeBasedFields.forEach(id => {
+    document.getElementById(id).style.display = ruleType === 'time_based' ? 'block' : 'none';
+  });
+
+  flatRateFields.forEach(id => {
+    document.getElementById(id).style.display = ruleType === 'flat_rate' ? 'block' : 'none';
+  });
+
+  overnightFields.forEach(id => {
+    document.getElementById(id).style.display = ruleType === 'overnight' ? 'block' : 'none';
+  });
+
+  perHourFields.forEach(id => {
+    document.getElementById(id).style.display = ruleType !== 'flat_rate' ? 'block' : 'none';
+  });
+}
+
+function savePricingRule() {
+  const form = document.getElementById('pricingForm');
+  const formData = new FormData(form);
+  const data = Object.fromEntries(formData.entries());
+  
+  // Convert to proper types
+  data.is_active = document.getElementById('isActive').checked;
+  data.priority = parseInt(data.priority) || 0;
+  data.first_hour_fee = parseInt(data.first_hour_fee) || 0;
+  data.subsequent_hour_fee = parseInt(data.subsequent_hour_fee) || 0;
+  data.flat_rate_fee = parseInt(data.flat_rate_fee) || 0;
+  data.overnight_fee = parseInt(data.overnight_fee) || 0;
+  if (data.start_hour) data.start_hour = parseInt(data.start_hour);
+  if (data.end_hour) data.end_hour = parseInt(data.end_hour);
+  if (!data.days_of_week) data.days_of_week = null;
+
+  const ruleId = document.getElementById('ruleId').value;
+  const url = ruleId ? `/api/pricing-rules/${ruleId}` : '/api/pricing-rules';
+  const method = ruleId ? 'PUT' : 'POST';
+
+  fetch(url, {
+    method: method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        showToast(data.message || 'Đã lưu thành công', 'success');
+        $('#pricingModal').modal('hide');
+        loadPricingRules();
+      } else {
+        showToast(data.error || 'Lỗi khi lưu', 'error');
+      }
+    })
+    .catch(err => {
+      console.error('Lỗi:', err);
+      showToast('Lỗi khi lưu quy tắc', 'error');
+    });
+}
+
+function deleteRule(ruleId) {
+  if (!confirm('Bạn có chắc muốn xóa quy tắc này?')) return;
+
+  fetch(`/api/pricing-rules/${ruleId}`, {
+    method: 'DELETE',
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        showToast('Đã xóa thành công', 'success');
+        loadPricingRules();
+      } else {
+        showToast(data.error || 'Lỗi khi xóa', 'error');
+      }
+    })
+    .catch(err => {
+      console.error('Lỗi:', err);
+      showToast('Lỗi khi xóa quy tắc', 'error');
+    });
+}
+
+function showToast(message, type) {
+  // Simple toast notification
+  const toast = document.createElement('div');
+  toast.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show position-fixed`;
+  toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+  toast.innerHTML = `
+    ${message}
+    <button type="button" class="close" data-dismiss="alert">
+      <span>&times;</span>
+    </button>
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', () => {
+  loadPricingRules();
+});
+</script>
+{% endblock %}
+

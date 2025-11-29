@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Đăng ký - Smart E-Parking{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 400px; margin: 50px auto;">
+  <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 10px 25px rgba(0,0,0,0.15);">
+    <h1 style="text-align: center; margin-bottom: 8px;">Đăng ký tài khoản</h1>
+    <p style="text-align: center; color: #6b7280; margin-bottom: 32px;">Tạo tài khoản client mới</p>
+
+    <form method="POST" action="{{ url_for('auth.register') }}">
+      {{ form.hidden_tag() }}
+      
+      <div style="margin-bottom: 20px;">
+        {{ form.username.label(class="form-label") }}
+        {{ form.username(class="form-input", placeholder="Tên đăng nhập (tối thiểu 3 ký tự)") }}
+        {% if form.username.errors %}
+          <div style="color: #ef4444; font-size: 0.85rem; margin-top: 4px;">
+            {{ form.username.errors[0] }}
+          </div>
+        {% endif %}
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        {{ form.email.label(class="form-label") }}
+        {{ form.email(class="form-input", placeholder="email@example.com") }}
+        {% if form.email.errors %}
+          <div style="color: #ef4444; font-size: 0.85rem; margin-top: 4px;">
+            {{ form.email.errors[0] }}
+          </div>
+        {% endif %}
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        {{ form.full_name.label(class="form-label") }}
+        {{ form.full_name(class="form-input", placeholder="Họ và tên") }}
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        {{ form.phone.label(class="form-label") }}
+        {{ form.phone(class="form-input", placeholder="Số điện thoại") }}
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        {{ form.password.label(class="form-label") }}
+        {{ form.password(class="form-input", placeholder="Mật khẩu (tối thiểu 6 ký tự)") }}
+        {% if form.password.errors %}
+          <div style="color: #ef4444; font-size: 0.85rem; margin-top: 4px;">
+            {{ form.password.errors[0] }}
+          </div>
+        {% endif %}
+      </div>
+
+      <div style="margin-bottom: 24px;">
+        {{ form.password2.label(class="form-label") }}
+        {{ form.password2(class="form-input", placeholder="Xác nhận mật khẩu") }}
+        {% if form.password2.errors %}
+          <div style="color: #ef4444; font-size: 0.85rem; margin-top: 4px;">
+            {{ form.password2.errors[0] }}
+          </div>
+        {% endif %}
+      </div>
+
+      {{ form.submit(class="btn btn-primary", style="width: 100%;") }}
+    </form>
+
+    <div style="text-align: center; margin-top: 24px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+      <p style="color: #6b7280; margin: 0;">
+        Đã có tài khoản? 
+        <a href="{{ url_for('auth.login') }}" style="color: #3b82f6; text-decoration: none;">Đăng nhập</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<style>
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+</style>
+{% endblock %}
+

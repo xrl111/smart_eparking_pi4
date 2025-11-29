@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Nhật ký hệ thống - Admin{% endblock %}
+
+{% block content %}
+<main class="container">
+  <header>
+    <h1>📋 Nhật ký hệ thống</h1>
+    <p>Lịch sử các sự kiện trong hệ thống</p>
+  </header>
+
+  <section>
+    <div style="background: white; border-radius: 12px; padding: 16px; max-height: 600px; overflow-y: auto;">
+      {% for log in logs %}
+      <div style="padding: 12px; border-bottom: 1px solid #f3f4f6;">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+          <div>
+            <strong style="color: #3b82f6;">{{ log.event_type }}</strong>
+            <br><span style="color: #6b7280; font-size: 0.9rem;">{{ log.message }}</span>
+            <br><small style="color: #9ca3af;">{{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') if log.created_at else '' }}</small>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div style="margin-top: 24px;">
+    <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">← Quay lại Dashboard</a>
+  </div>
+</main>
+{% endblock %}
+

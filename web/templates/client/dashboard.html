@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Smart E-Parking{% endblock %}
+
+{% block content %}
+<main class="container">
+  <header>
+    <h1>🚗 Smart E-Parking System</h1>
+    <p>Xin chào, {{ current_user.full_name or current_user.username }}!</p>
+    <div class="system-status" id="system-status">
+      <span class="status-indicator" id="status-indicator"></span>
+      <span id="status-text">Đang kết nối...</span>
+    </div>
+  </header>
+
+  <section class="stats">
+    <div class="stat-card">
+      <span class="label">Tổng chỗ đỗ</span>
+      <strong id="total-slots">{{ total_slots }}</strong>
+    </div>
+    <div class="stat-card">
+      <span class="label">Chỗ trống</span>
+      <strong id="free-slots">0</strong>
+    </div>
+    <div class="stat-card">
+      <span class="label">Tỷ lệ sử dụng</span>
+      <strong id="usage-rate">0%</strong>
+    </div>
+    <div class="stat-card status-online" id="gate-status-card">
+      <span class="label">Trạng thái Barrier</span>
+      <strong id="gate-state">--</strong>
+    </div>
+  </section>
+
+  <section>
+    <h2>📊 Danh sách chỗ đỗ</h2>
+    <div class="slots" id="slots">
+      <div class="loading-container" style="text-align: center; padding: 40px">
+        <div class="loading"></div>
+        <p>Đang tải dữ liệu...</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>🚗 Lịch sử đỗ xe của tôi</h2>
+    <div id="my-sessions" style="background: white; border-radius: 12px; padding: 16px;">
+      <p style="color: #6b7280;">Đang tải...</p>
+    </div>
+  </section>
+</main>
+
+<script>
+// Override fetchStatus to use authenticated endpoint
+async function fetchStatus() {
+  try {
+    const res = await fetch('/api/status', {
+      headers: {
+        'Cache-Control': 'no-cache',
+      },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    render(data);
+    updateConnectionStatus('online');
+    lastUpdateTime = data.last_update;
+    return data;
+  } catch (err) {
+    console.error('Lỗi:', err);
+    updateConnectionStatus('offline');
+    return null;
+  }
+}
+
+// Load user sessions
+async function loadMySessions() {
+  try {
+    const res = await fetch('/api/my-sessions');
+    const data = await res.json();
+    const container = document.getElementById('my-sessions');
+    
+    if (data.sessions && data.sessions.length > 0) {
+      container.innerHTML = data.sessions.map(s => `
+        <div style="padding: 12px; border-bottom: 1px solid #f3f4f6; display: flex; justify-content: space-between;">
+          <div>
+            <strong>Slot ${s.slot_id + 1}</strong>
+            ${s.vehicle_plate ? `<br><small>Biển số: ${s.vehicle_plate}</small>` : ''}
+            <br><small>Vào: ${new Date(s.entry_time).toLocaleString('vi-VN')}</small>
+            ${s.exit_time ? `<br><small>Ra: ${new Date(s.exit_time).toLocaleString('vi-VN')}</small>` : ''}
+            ${s.duration_minutes ? `<br><small>Thời gian: ${s.duration_minutes} phút</small>` : ''}
+          </div>
+          <div>
+            <span style="background: ${s.status === 'active' ? '#22c55e' : '#6b7280'}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">
+              ${s.status === 'active' ? 'Đang đỗ' : 'Đã hoàn thành'}
+            </span>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      container.innerHTML = '<p style="color: #6b7280; text-align: center;">Chưa có lịch sử đỗ xe.</p>';
+    }
+  } catch (err) {
+    console.error('Lỗi khi tải lịch sử:', err);
+  }
+}
+
+// Load sessions on page load
+loadMySessions();
+setInterval(loadMySessions, 10000); // Refresh every 10 seconds
+</script>
+{% endblock %}
+

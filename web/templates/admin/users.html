@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Quản lý người dùng - Admin{% endblock %}
+
+{% block content %}
+<main class="container">
+  <header>
+    <h1>👥 Quản lý người dùng</h1>
+    <p>Danh sách tất cả người dùng trong hệ thống</p>
+  </header>
+
+  <section>
+    <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden;">
+      <thead>
+        <tr style="background: #f3f4f6;">
+          <th style="padding: 12px; text-align: left;">ID</th>
+          <th style="padding: 12px; text-align: left;">Tên đăng nhập</th>
+          <th style="padding: 12px; text-align: left;">Email</th>
+          <th style="padding: 12px; text-align: left;">Họ tên</th>
+          <th style="padding: 12px; text-align: left;">Vai trò</th>
+          <th style="padding: 12px; text-align: left;">Trạng thái</th>
+          <th style="padding: 12px; text-align: left;">Ngày tạo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr style="border-top: 1px solid #e5e7eb;">
+          <td style="padding: 12px;">{{ user.id }}</td>
+          <td style="padding: 12px;"><strong>{{ user.username }}</strong></td>
+          <td style="padding: 12px;">{{ user.email }}</td>
+          <td style="padding: 12px;">{{ user.full_name or '-' }}</td>
+          <td style="padding: 12px;">
+            {% if user.role == 'admin' %}
+              <span style="background: #3b82f6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">ADMIN</span>
+            {% else %}
+              <span style="background: #6b7280; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">CLIENT</span>
+            {% endif %}
+          </td>
+          <td style="padding: 12px;">
+            {% if user.is_active %}
+              <span style="color: #22c55e;">✓ Hoạt động</span>
+            {% else %}
+              <span style="color: #ef4444;">✗ Vô hiệu</span>
+            {% endif %}
+          </td>
+          <td style="padding: 12px;">{{ user.created_at.strftime('%d/%m/%Y') if user.created_at else '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <div style="margin-top: 24px;">
+    <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">← Quay lại Dashboard</a>
+  </div>
+</main>
+{% endblock %}
+

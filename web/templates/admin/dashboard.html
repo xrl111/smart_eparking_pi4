@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Smart E-Parking{% endblock %}
+
+{% block content %}
+<main class="container">
+  <header>
+    <h1>🚗 Smart E-Parking System - Admin</h1>
+    <p>Bảng điều khiển quản trị viên</p>
+    <div class="system-status" id="system-status">
+      <span class="status-indicator" id="status-indicator"></span>
+      <span id="status-text">Đang kết nối...</span>
+    </div>
+  </header>
+
+  <section class="stats">
+    <div class="stat-card">
+      <span class="label">Tổng chỗ đỗ</span>
+      <strong id="total-slots">{{ total_slots }}</strong>
+    </div>
+    <div class="stat-card">
+      <span class="label">Chỗ trống</span>
+      <strong id="free-slots">0</strong>
+    </div>
+    <div class="stat-card">
+      <span class="label">Đang đỗ</span>
+      <strong id="active-sessions">0</strong>
+    </div>
+    <div class="stat-card">
+      <span class="label">Tổng lượt đỗ hôm nay</span>
+      <strong id="today-sessions">0</strong>
+    </div>
+  </section>
+
+  <section>
+    <h2>📊 Danh sách chỗ đỗ</h2>
+    <div class="slots" id="slots">
+      <div class="loading-container" style="text-align: center; padding: 40px">
+        <div class="loading"></div>
+        <p>Đang tải dữ liệu...</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>⚙️ Chế độ hoạt động</h2>
+    <div style="background: white; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div>
+          <h3 style="margin: 0 0 8px 0;">Chế độ hiện tại</h3>
+          <div id="current-mode" style="font-size: 1.2rem; font-weight: 600;">
+            <span id="mode-badge" style="padding: 8px 16px; border-radius: 8px; color: white;"></span>
+            <span id="mode-description" style="margin-left: 12px; color: #6b7280;"></span>
+          </div>
+        </div>
+        <div>
+          <button id="btn-mode-auto" class="btn btn-primary" style="margin-right: 8px;">🔄 AUTO</button>
+          <button id="btn-mode-manual" class="btn btn-secondary">✋ MANUAL</button>
+        </div>
+      </div>
+      <div id="mode-warning" style="padding: 12px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b; display: none;">
+        <strong>⚠️ Lưu ý:</strong> <span id="mode-warning-text"></span>
+      </div>
+    </div>
+
+  <section>
+    <h2>🎛️ Điều khiển hệ thống</h2>
+    <div class="manual-controls" id="manual-controls-section">
+      <div class="control-group">
+        <h3>Barrier Control</h3>
+        <button id="btn-gate-open" class="btn btn-success">🔓 Mở Barrier</button>
+        <button id="btn-gate-close" class="btn btn-danger">🔒 Đóng Barrier</button>
+        <p id="gate-control-hint" style="color: #6b7280; font-size: 0.9rem; margin-top: 8px;"></p>
+      </div>
+      <div class="control-group">
+        <h3>Slot Management</h3>
+        <div id="slot-controls">
+          <p style="color: #6b7280; margin: 0">Đang tải...</p>
+        </div>
+      </div>
+      <div class="control-group">
+        <h3>System Test</h3>
+        <button id="btn-buzzer" class="btn btn-warning">🔊 Test Buzzer</button>
+        <button id="btn-refresh" class="btn btn-primary">🔄 Làm mới</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>📋 Lịch sử đỗ xe</h2>
+    <div id="history" style="background: white; border-radius: 12px; padding: 16px; max-height: 400px; overflow-y: auto;">
+      <p style="color: #6b7280;">Đang tải...</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>📋 Thông báo hệ thống</h2>
+    <ul id="errors">
+      <li>Không có thông báo.</li>
+    </ul>
+  </section>
+</main>
+
+<script>
+// Override fetchStatus to use authenticated endpoint
+async function fetchStatus() {
+  try {
+    const res = await fetch('/api/status');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    render(data);
+    
+    // Update admin-specific stats
+    if (data.active_sessions !== undefined) {
+      document.getElementById('active-sessions').textContent = data.active_sessions;
+    }
+    if (data.today_sessions !== undefined) {
+      document.getElementById('today-sessions').textContent = data.today_sessions;
+    }
+    
+    // Update mode display (nếu có thông tin mode trong response)
+    if (data.mode !== undefined || data.is_auto !== undefined) {
+      updateModeDisplay(data);
+    } else {
+      // Nếu không có trong status, fetch riêng
+      fetch('/api/mode')
+        .then(res => res.json())
+        .then(modeData => updateModeDisplay(modeData))
+        .catch(err => console.error('Lỗi khi load mode:', err));
+    }
+    
+    updateConnectionStatus('online');
+    lastUpdateTime = data.last_update;
+    return data;
+  } catch (err) {
+    console.error('Lỗi:', err);
+    updateConnectionStatus('offline');
+    return null;
+  }
+}
+
+// Load history
+async function loadHistory() {
+  try {
+    const res = await fetch('/api/history');
+    const data = await res.json();
+    const container = document.getElementById('history');
+    
+    if (data.sessions && data.sessions.length > 0) {
+      container.innerHTML = data.sessions.map(s => `
+        <div style="padding: 12px; border-bottom: 1px solid #f3f4f6;">
+          <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div>
+              <strong>Slot ${s.slot_id + 1}</strong>
+              ${s.vehicle_plate ? `<br><small>Biển số: ${s.vehicle_plate}</small>` : ''}
+              ${s.user ? `<br><small>Người dùng: ${s.user}</small>` : ''}
+              <br><small>Vào: ${new Date(s.entry_time).toLocaleString('vi-VN')}</small>
+              ${s.exit_time ? `<br><small>Ra: ${new Date(s.exit_time).toLocaleString('vi-VN')}</small>` : ''}
+              ${s.duration_minutes ? `<br><small>Thời gian: ${s.duration_minutes} phút</small>` : ''}
+            </div>
+            <span style="background: ${s.status === 'active' ? '#22c55e' : '#6b7280'}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">
+              ${s.status === 'active' ? 'Đang đỗ' : 'Đã hoàn thành'}
+            </span>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      container.innerHTML = '<p style="color: #6b7280; text-align: center;">Chưa có lịch sử.</p>';
+    }
+  } catch (err) {
+    console.error('Lỗi khi tải lịch sử:', err);
+  }
+}
+
+// Mode management
+function updateModeDisplay(data) {
+  const mode = data.mode || 'auto';
+  const isManual = mode === 'manual';
+  const isAuto = mode === 'auto';
+  
+  const badge = document.getElementById('mode-badge');
+  const description = document.getElementById('mode-description');
+  const warning = document.getElementById('mode-warning');
+  const warningText = document.getElementById('mode-warning-text');
+  const gateHint = document.getElementById('gate-control-hint');
+  
+  // Update badge
+  if (isAuto) {
+    badge.textContent = '🔄 AUTO';
+    badge.style.background = '#3b82f6';
+    description.textContent = 'Arduino tự động điều khiển dựa trên cảm biến';
+    gateHint.textContent = '⚠️ Chế độ AUTO: Arduino điều khiển barrier tự động. Chuyển sang MANUAL để điều khiển thủ công.';
+    gateHint.style.color = '#f59e0b';
+  } else {
+    badge.textContent = '✋ MANUAL';
+    badge.style.background = '#6b7280';
+    description.textContent = 'Điều khiển thủ công từ web dashboard';
+    gateHint.textContent = '✓ Chế độ MANUAL: Bạn có thể điều khiển barrier và slot từ đây.';
+    gateHint.style.color = '#22c55e';
+  }
+  
+  // Update warning
+  if (isManual && data.locked_by) {
+    warning.style.display = 'block';
+    warningText.textContent = `Chế độ MANUAL đang được quản lý bởi: ${data.locked_by}`;
+  } else {
+    warning.style.display = 'none';
+  }
+  
+  // Enable/disable manual controls
+  const manualControls = document.getElementById('manual-controls-section');
+  if (isManual) {
+    manualControls.style.opacity = '1';
+    manualControls.style.pointerEvents = 'auto';
+  } else {
+    manualControls.style.opacity = '0.6';
+    manualControls.style.pointerEvents = 'none';
+  }
+  
+  // Update button states (chỉ disable nếu đang ở chế độ đó)
+  const btnAuto = document.getElementById('btn-mode-auto');
+  const btnManual = document.getElementById('btn-mode-manual');
+  
+  if (btnAuto) {
+    btnAuto.disabled = isAuto;
+    btnAuto.style.opacity = isAuto ? '0.5' : '1';
+  }
+  if (btnManual) {
+    btnManual.disabled = isManual;
+    btnManual.style.opacity = isManual ? '0.5' : '1';
+  }
+}
+
+async function changeMode(mode) {
+  const btnAuto = document.getElementById('btn-mode-auto');
+  const btnManual = document.getElementById('btn-mode-manual');
+  
+  // Disable buttons while processing
+  if (btnAuto) btnAuto.disabled = true;
+  if (btnManual) btnManual.disabled = true;
+  
+  try {
+    const res = await fetch('/api/mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    });
+    
+    const data = await res.json();
+    if (res.ok) {
+      showToast(`Đã chuyển sang chế độ ${mode.toUpperCase()}`, 'success');
+      
+      // Cập nhật mode display ngay lập tức
+      const modeInfo = {
+        mode: mode,
+        is_auto: mode === 'auto',
+        is_manual: mode === 'manual',
+        arduino_control: mode === 'auto',
+        web_control: mode === 'manual',
+      };
+      updateModeDisplay(modeInfo);
+      
+      // Refresh toàn bộ status sau một chút để đảm bảo server đã cập nhật
+      setTimeout(() => {
+        fetchStatus();
+      }, 300);
+    } else {
+      showToast(`Lỗi: ${data.error || 'Không thể chuyển chế độ'}`, 'error');
+      // Re-enable buttons on error
+      if (btnAuto) btnAuto.disabled = false;
+      if (btnManual) btnManual.disabled = false;
+    }
+  } catch (err) {
+    console.error('Lỗi khi chuyển chế độ:', err);
+    showToast('Lỗi kết nối khi chuyển chế độ', 'error');
+    // Re-enable buttons on error
+    if (btnAuto) btnAuto.disabled = false;
+    if (btnManual) btnManual.disabled = false;
+  }
+}
+
+// Setup mode buttons
+document.addEventListener('DOMContentLoaded', () => {
+  const btnAuto = document.getElementById('btn-mode-auto');
+  const btnManual = document.getElementById('btn-mode-manual');
+  
+  if (btnAuto) {
+    btnAuto.addEventListener('click', () => changeMode('auto'));
+  }
+  if (btnManual) {
+    btnManual.addEventListener('click', () => changeMode('manual'));
+  }
+  
+  // Load initial mode
+  fetch('/api/mode')
+    .then(res => res.json())
+    .then(data => updateModeDisplay(data))
+    .catch(err => console.error('Lỗi khi load mode:', err));
+});
+
+// Load history on page load
+loadHistory();
+setInterval(loadHistory, 15000); // Refresh every 15 seconds
+</script>
+{% endblock %}
+
