@@ -1,0 +1,37 @@
+HƯỚNG DẪN CHẠY NHANH HỆ THỐNG
+================================
+
+1. CÀI ĐẶT DEPENDENCIES:
+   pip install Flask Flask-SQLAlchemy Flask-Login Flask-WTF WTForms Werkzeug python-dotenv pyserial
+
+2. CẤU HÌNH .ENV:
+   Tạo file .env với nội dung:
+   
+   SERIAL_PORT=
+   SERIAL_SIMULATION=true
+   LOG_LEVEL=INFO
+   FLASK_DEBUG=true
+   DATABASE_URL=sqlite:///parking.db
+   SECRET_KEY=dev-secret-key
+
+3. CHẠY HỆ THỐNG:
+   python main.py
+
+4. TRUY CẬP:
+   Mở trình duyệt: http://localhost:5000
+
+5. ĐĂNG NHẬP:
+   - Admin: admin / admin123
+   - Hoặc đăng ký tài khoản mới
+
+6. TEST:
+   - Dashboard hiển thị trạng thái
+   - Chuyển đổi AUTO/MANUAL mode
+   - Tạo pricing rules
+   - Xem lịch sử đỗ xe
+
+LƯU Ý:
+- Trên Windows: Có thể có cảnh báo về encoding (không ảnh hưởng chức năng)
+- Trên Raspberry Pi: Đặt SERIAL_PORT=/dev/ttyACM0 và SERIAL_SIMULATION=false
+
+

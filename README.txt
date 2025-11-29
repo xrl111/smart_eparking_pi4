@@ -77,7 +77,20 @@ SMART E-PARKING (Raspberry Pi 4 + Arduino)
   * Kích hoạt buzzer test
   * API endpoints: /api/gate, /api/slot, /api/buzzer
 
-7. GHI CHÚ
+7. VERSION MANAGEMENT
+- Hệ thống được chia thành 5 version từ MVP đến Production Ready.
+- Version hiện tại: 4.0 (Pricing & Payment System)
+- Xem chi tiết:
+  * VERSION_SUMMARY.txt      : Tóm tắt nhanh các version
+  * VERSION_ROADMAP.md        : Roadmap chi tiết
+  * VERSION_CURRENT.md        : Thông tin version hiện tại
+  * DEPLOYMENT_GUIDE.md       : Hướng dẫn triển khai từng version
+- Sử dụng version manager:
+  * python scripts/version_manager.py list        # Liệt kê versions
+  * python scripts/version_manager.py info 2.0   # Xem thông tin version
+  * python scripts/version_manager.py current     # Version hiện tại
+
+8. GHI CHÚ
 - LCD/Servo/Buzzer trong thư mục hardware là optional. Hệ thống mẫu hiện điều khiển các phần này bằng Arduino như mô tả trong báo cáo.
 - Logging ghi ra console và file parking.log (có thể chỉnh trong config.py).
 - Manual control chỉ ảnh hưởng state trên Pi, không điều khiển trực tiếp Arduino.

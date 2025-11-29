@@ -1,0 +1,230 @@
+HƯỚNG DẪN TEST HỆ THỐNG SMART E-PARKING
+==========================================
+
+═══════════════════════════════════════════════════════════════════════════════
+
+1. KHỞI ĐỘNG HỆ THỐNG
+═══════════════════════════════════════════════════════════════════════════════
+
+Trên Windows (PC - Simulation mode):
+  python main.py
+
+Trên Raspberry Pi (với Arduino):
+  python3 main.py
+
+Hệ thống sẽ chạy tại: http://localhost:5000 (hoặc http://<pi-ip>:5000)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+2. ĐĂNG NHẬP
+═══════════════════════════════════════════════════════════════════════════════
+
+Tài khoản mặc định (tự động tạo khi chạy lần đầu):
+  - Admin:
+    Username: admin
+    Password: admin123
+  
+  - Client (tạo mới):
+    Đăng ký tại: http://localhost:5000/register
+
+═══════════════════════════════════════════════════════════════════════════════
+
+3. TEST CÁC TÍNH NĂNG
+═══════════════════════════════════════════════════════════════════════════════
+
+A. ADMIN DASHBOARD
+───────────────────────────────────────────────────────────────────────────────
+
+1. Đăng nhập với tài khoản admin
+2. Kiểm tra các tính năng:
+
+   a) Xem trạng thái hệ thống:
+      - Tổng chỗ đỗ
+      - Chỗ trống
+      - Đang đỗ
+      - Tổng lượt đỗ hôm nay
+
+   b) Chuyển đổi chế độ (AUTO/MANUAL):
+      - Click nút "AUTO" hoặc "MANUAL"
+      - Kiểm tra trạng thái cập nhật
+
+   c) Điều khiển thủ công (MANUAL mode):
+      - Mở/Đóng Barrier
+      - Đánh dấu slot (CÓ XE / TRỐNG)
+      - Test Buzzer
+
+   d) Quản lý bảng giá:
+      - Vào: Quản lý bảng giá
+      - Tạo pricing rule mới:
+        * Ví dụ: "Giờ cao điểm sáng" (6h-12h, 15,000 VNĐ/giờ đầu)
+        * Ví dụ: "Qua đêm" (22h-6h, 50,000 VNĐ/đêm)
+      - Kiểm tra priority (số càng cao càng ưu tiên)
+
+   e) Xem lịch sử:
+      - Lịch sử đỗ xe
+      - Nhật ký hệ thống
+      - Quản lý người dùng
+
+───────────────────────────────────────────────────────────────────────────────
+
+B. CLIENT DASHBOARD
+───────────────────────────────────────────────────────────────────────────────
+
+1. Đăng ký tài khoản mới:
+   - Vào: http://localhost:5000/register
+   - Điền thông tin
+   - Đăng nhập
+
+2. Kiểm tra:
+   - Xem trạng thái chỗ đỗ
+   - Xem lịch sử đỗ xe của mình
+   - Xem phí đỗ xe (nếu có session)
+
+───────────────────────────────────────────────────────────────────────────────
+
+C. TEST LUỒNG HOẠT ĐỘNG HOÀN CHỈNH
+───────────────────────────────────────────────────────────────────────────────
+
+1. Tạo Pricing Rule (Admin):
+   - Vào: Quản lý bảng giá
+   - Tạo rule: "Giờ thường" (0h-24h, 10,000 VNĐ/giờ đầu, 5,000 VNĐ/giờ tiếp)
+   - Priority: 0
+
+2. Tạo Session thủ công (Admin - MANUAL mode):
+   - Chuyển sang MANUAL mode
+   - Đánh dấu Slot 1: "CÓ XE"
+   - Kiểm tra session được tạo tự động
+
+3. Xem thời gian đỗ (Real-time):
+   - Dashboard hiển thị: "Đã đỗ: X giờ Y phút"
+   - API: GET /api/session/{id}/duration
+
+4. Kết thúc Session:
+   - Đánh dấu Slot 1: "TRỐNG"
+   - Kiểm tra:
+     * Session tự động kết thúc
+     * Phí được tính tự động
+     * payment_status = "pending"
+
+5. Thanh toán:
+   - API: POST /api/session/{id}/pay
+   - Hoặc Admin đánh dấu "Đã thanh toán"
+   - Kiểm tra payment_status = "paid"
+
+───────────────────────────────────────────────────────────────────────────────
+
+D. TEST API ENDPOINTS
+───────────────────────────────────────────────────────────────────────────────
+
+1. Status API:
+   GET http://localhost:5000/api/status
+   Headers: Cookie (từ session đăng nhập)
+
+2. Mode API:
+   GET http://localhost:5000/api/mode
+   POST http://localhost:5000/api/mode
+   Body: {"mode": "auto" hoặc "manual"}
+
+3. Pricing Rules API:
+   GET http://localhost:5000/api/pricing-rules
+   POST http://localhost:5000/api/pricing-rules
+   Body: {
+     "name": "Giờ cao điểm",
+     "rule_type": "time_based",
+     "start_hour": 6,
+     "end_hour": 12,
+     "first_hour_fee": 15000,
+     "subsequent_hour_fee": 10000,
+     "priority": 10
+   }
+
+4. Session API:
+   GET http://localhost:5000/api/my-sessions
+   GET http://localhost:5000/api/session/{id}/fee
+   GET http://localhost:5000/api/session/{id}/duration
+   POST http://localhost:5000/api/session/{id}/pay
+
+═══════════════════════════════════════════════════════════════════════════════
+
+4. TEST VỚI ARDUINO (Nếu có phần cứng)
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Cập nhật .env:
+   SERIAL_PORT=/dev/ttyACM0  (Linux) hoặc COM3 (Windows)
+   SERIAL_SIMULATION=false
+
+2. Upload code Arduino:
+   - Mở: arduino/smart_parking.ino
+   - Upload vào Arduino Uno
+
+3. Kết nối Arduino với Pi/PC:
+   - USB cable
+
+4. Chạy hệ thống:
+   python3 main.py
+
+5. Test:
+   - Đưa tay vào sensor SRF05 → Slot 1 hiển thị "CÓ XE"
+   - Rút tay ra → Slot 1 hiển thị "TRỐNG"
+   - Barrier tự động mở/đóng (AUTO mode)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+5. KIỂM TRA LOGS
+═══════════════════════════════════════════════════════════════════════════════
+
+Console logs:
+  - INFO: Thông tin hoạt động
+  - WARNING: Cảnh báo
+  - ERROR: Lỗi
+
+File logs (nếu có):
+  - parking.log
+
+═══════════════════════════════════════════════════════════════════════════════
+
+6. XỬ LÝ LỖI THƯỜNG GẶP
+═══════════════════════════════════════════════════════════════════════════════
+
+Lỗi: "ModuleNotFoundError: No module named 'flask_login'"
+Giải pháp:
+  pip install Flask-Login Flask-SQLAlchemy Flask-WTF WTForms Werkzeug
+
+Lỗi: "sqlalchemy.exc.InvalidRequestError: Attribute name 'metadata' is reserved"
+Giải pháp:
+  - Xóa file parking.db cũ
+  - Chạy lại app để tạo schema mới
+
+Lỗi: "Serial port not found"
+Giải pháp:
+  - Kiểm tra SERIAL_PORT trong .env
+  - Hoặc bật SERIAL_SIMULATION=true
+
+Lỗi: "Database locked"
+Giải pháp:
+  - Đóng các kết nối database khác
+  - Xóa file parking.db và tạo lại
+
+═══════════════════════════════════════════════════════════════════════════════
+
+7. CHECKLIST TEST
+═══════════════════════════════════════════════════════════════════════════════
+
+□ Hệ thống khởi động thành công
+□ Đăng nhập admin thành công
+□ Đăng ký client thành công
+□ Dashboard hiển thị đúng
+□ Chuyển đổi AUTO/MANUAL mode
+□ Điều khiển barrier thủ công (MANUAL)
+□ Đánh dấu slot thủ công (MANUAL)
+□ Tạo pricing rule
+□ Session tự động tạo khi slot có xe
+□ Session tự động kết thúc khi slot trống
+□ Tính phí tự động
+□ Thanh toán session
+□ Xem lịch sử đỗ xe
+□ API endpoints hoạt động đúng
+
+═══════════════════════════════════════════════════════════════════════════════
+
+
