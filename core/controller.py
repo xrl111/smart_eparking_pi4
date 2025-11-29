@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from typing import Optional
 
 from config import OperationMode, ParkingConfig
@@ -35,6 +37,11 @@ class ParkingController:
 
         self.serial_client.add_listener(self._handle_payload)
         
+        # Đồng bộ state
+        self._last_lcd_update = None  # Track LCD update để tránh update không cần thiết
+        self._last_arduino_ping = None  # Track last ping time
+        self._sync_interval = 2.0  # Sync interval (seconds)
+        
         # Khởi tạo chế độ mặc định
         self.mode_manager.set_mode(OperationMode.DEFAULT_MODE)
 
@@ -42,10 +49,15 @@ class ParkingController:
         logger.info("Khởi động ParkingController với %s slot", ParkingConfig.TOTAL_SLOTS)
         self.serial_client.start()
         
-        # Đợi một chút để serial kết nối, rồi gửi chế độ mặc định xuống Arduino
-        import time
+        # Đợi một chút để serial kết nối, rồi đồng bộ toàn bộ state
         time.sleep(1.0)  # Đợi Arduino sẵn sàng
-        self._sync_mode_to_arduino(OperationMode.DEFAULT_MODE)
+        
+        # Đồng bộ ban đầu
+        self._full_sync_to_arduino()
+        
+        # Bắt đầu heartbeat thread
+        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self._heartbeat_thread.start()
 
     def stop(self) -> None:
         logger.info("Dừng ParkingController")
@@ -72,19 +84,24 @@ class ParkingController:
         self._sync_hardware(snapshot)
 
     def _sync_hardware(self, snapshot: dict) -> None:
-        """Đồng bộ hardware - chỉ trong AUTO mode."""
-        # CHỈ điều khiển hardware từ Arduino khi ở AUTO mode
-        if not self.mode_manager.can_control_from_arduino():
-            logger.debug("Đang ở MANUAL mode, bỏ qua điều khiển từ Arduino")
-            return
-
-        free = snapshot["free"]
-        gate = snapshot["gate"]
+        """Đồng bộ hardware và cập nhật LCD trên Arduino."""
+        free = snapshot.get("free", 0)
+        total_slots = snapshot.get("total_slots", ParkingConfig.TOTAL_SLOTS)
+        gate = snapshot.get("gate", "closed")
         mode = snapshot.get("operation_mode", OperationMode.AUTO)
 
+        # Cập nhật LCD trên Arduino (chỉ khi thay đổi)
+        line1 = f"Tong slot: {total_slots}"
+        line2 = f"Con trong: {free}"
+        lcd_content = f"{line1}|{line2}"
+        
+        # Chỉ update LCD khi có thay đổi
+        if self._last_lcd_update != lcd_content:
+            self._update_arduino_lcd(line1, line2)
+            self._last_lcd_update = lcd_content
+
+        # LCD trên Pi (nếu có)
         if self.lcd:
-            line1 = f"Free: {free}/{ParkingConfig.TOTAL_SLOTS}"
-            line2 = f"Gate: {gate} [{mode.upper()}]"
             self.lcd.show(line1, line2)
 
         # CHỈ điều khiển servo từ Arduino trong AUTO mode
@@ -94,8 +111,7 @@ class ParkingController:
             else:
                 self.servo.close()
 
-        if self.buzzer and free == 0:
-            self.buzzer.beep()
+        # Buzzer đã được loại bỏ, thay bằng web notifications
 
     # --------------------------------------------------------------
     # MANUAL CONTROL METHODS
@@ -114,12 +130,11 @@ class ParkingController:
         # Cập nhật state manager
         self.state_manager.update({"gate": state})
         
-        # Gửi command xuống Arduino để điều khiển barrier (trong MANUAL mode)
-        if self.mode_manager.is_manual_mode():
-            gate_cmd = "GATE:OPEN" if state == "open" else "GATE:CLOSED"
-            success = self.serial_client.send_command(gate_cmd)
-            if not success:
-                logger.warning("Không thể gửi command gate xuống Arduino")
+        # Gửi command xuống Arduino để điều khiển barrier
+        gate_cmd = "BARRIER:OPEN" if state == "open" else "BARRIER:CLOSE"
+        success = self.serial_client.send_command(gate_cmd)
+        if not success:
+            logger.warning("Không thể gửi command barrier xuống Arduino")
         
         # Điều khiển servo nếu có (trong MANUAL mode)
         if self.servo and self.mode_manager.is_manual_mode():
@@ -128,7 +143,7 @@ class ParkingController:
             else:
                 self.servo.close()
         
-        logger.info("Điều khiển gate thủ công: %s (MANUAL mode)", state)
+        logger.info("Điều khiển barrier thủ công: %s (MANUAL mode)", state)
         return True
 
     def manual_set_slot(self, slot_index: int, occupied: bool) -> bool:
@@ -146,17 +161,24 @@ class ParkingController:
         slots = snapshot["slots"].copy()
         slots[slot_index] = 1 if occupied else 0
         
+        # Cập nhật state
         self.state_manager.update({"slots": slots})
-        logger.info("Đặt slot %s thủ công: %s (MANUAL mode)", slot_index, "occupied" if occupied else "free")
+        
+        # Gửi command xuống Arduino để cập nhật slot (chỉ Slot 2,3 - Slot 1 từ sensor)
+        if slot_index > 0:  # Chỉ gửi cho Slot 2,3 (index 1,2)
+            slot_cmd = f"SLOT:{slot_index + 1}:{1 if occupied else 0}"  # Slot 1,2,3 (không phải index)
+            success = self.serial_client.send_command(slot_cmd)
+            if not success:
+                logger.warning("Không thể gửi command slot xuống Arduino")
+        
+        logger.info("Đặt slot %s thủ công: %s (MANUAL mode)", slot_index + 1, "occupied" if occupied else "free")
         return True
 
-    def manual_trigger_buzzer(self, duration: float = 0.2) -> bool:
-        """Kích hoạt buzzer thủ công"""
-        if self.buzzer:
-            self.buzzer.beep(duration)
-            logger.info("Kích hoạt buzzer thủ công")
-            return True
-        return False
+    def _update_arduino_lcd(self, line1: str, line2: str) -> None:
+        """Cập nhật LCD trên Arduino với format mới."""
+        # Format: LCD:UPDATE:line1|line2
+        lcd_cmd = f"LCD:UPDATE:{line1}|{line2}"
+        self.serial_client.send_command(lcd_cmd)
 
     def _handle_slot_changes(self, prev_slots: list, current_slots: list) -> None:
         """Tự động tạo/kết thúc parking sessions khi slot thay đổi."""
@@ -198,4 +220,63 @@ class ParkingController:
         elif mode == OperationMode.MANUAL:
             self.serial_client.send_command("MODE:MANUAL")
             logger.info("Đã gửi MODE:MANUAL xuống Arduino")
+    
+    def _full_sync_to_arduino(self) -> None:
+        """Đồng bộ toàn bộ state xuống Arduino (khi kết nối lại hoặc khởi động)."""
+        snapshot = self.state_manager.snapshot()
+        
+        # Đồng bộ mode
+        mode = snapshot.get("operation_mode", OperationMode.DEFAULT_MODE)
+        self._sync_mode_to_arduino(mode)
+        
+        # Đồng bộ LCD
+        free = snapshot.get("free", 0)
+        total_slots = snapshot.get("total_slots", ParkingConfig.TOTAL_SLOTS)
+        line1 = f"Tong slot: {total_slots}"
+        line2 = f"Con trong: {free}"
+        self._update_arduino_lcd(line1, line2)
+        self._last_lcd_update = f"{line1}|{line2}"
+        
+        # Đồng bộ slots (nếu ở MANUAL mode)
+        if mode == OperationMode.MANUAL:
+            slots = snapshot.get("slots", [])
+            for idx, status in enumerate(slots):
+                if idx > 0:  # Slot 2,3 (index 1,2)
+                    slot_cmd = f"SLOT:{idx + 1}:{status}"
+                    self.serial_client.send_command(slot_cmd)
+        
+        # Đồng bộ barrier (nếu ở MANUAL mode)
+        if mode == OperationMode.MANUAL:
+            gate = snapshot.get("gate", "closed")
+            gate_cmd = "BARRIER:OPEN" if gate == "open" else "BARRIER:CLOSE"
+            self.serial_client.send_command(gate_cmd)
+        
+        logger.info("Đã đồng bộ toàn bộ state xuống Arduino")
+    
+    def _heartbeat_loop(self) -> None:
+        """Heartbeat loop để kiểm tra kết nối và đồng bộ định kỳ."""
+        while True:
+            try:
+                time.sleep(self._sync_interval)
+                
+                # Ping Arduino để kiểm tra kết nối
+                if self.serial_client.send_command("PING"):
+                    self._last_arduino_ping = time.time()
+                
+                # Đồng bộ LCD định kỳ (đảm bảo không bị mất đồng bộ)
+                snapshot = self.state_manager.snapshot()
+                free = snapshot.get("free", 0)
+                total_slots = snapshot.get("total_slots", ParkingConfig.TOTAL_SLOTS)
+                line1 = f"Tong slot: {total_slots}"
+                line2 = f"Con trong: {free}"
+                lcd_content = f"{line1}|{line2}"
+                
+                # Update mỗi 5 giây để đảm bảo đồng bộ
+                if time.time() - (self._last_arduino_ping or 0) > 5.0:
+                    self._update_arduino_lcd(line1, line2)
+                    self._last_lcd_update = lcd_content
+                    
+            except Exception as e:
+                logger.error("Lỗi trong heartbeat loop: %s", e)
+                time.sleep(1.0)
 

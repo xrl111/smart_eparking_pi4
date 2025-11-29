@@ -1,0 +1,178 @@
+HƯỚNG DẪN NỐI DÂY - SMART E-PARKING V2.0
+==========================================
+
+THIẾT BỊ CẦN THIẾT:
+───────────────────────────────────────────────────────────────────────────────
+- Arduino Uno R3
+- Raspberry Pi 4
+- SRF05 Ultrasonic Sensor (1 cái cho Slot 1)
+- Servo Motor SG90
+- LCD 1602 I2C
+- Button DIP 6x6x10MM (2 chân)
+- LED 3MM: Xanh lá, Vàng, Đỏ (mỗi loại 1 cái)
+- Resistor 220Ω (3 cái cho LED)
+- Resistor 10kΩ (1 cái cho button pull-up - có thể dùng internal pull-up)
+- Dây nối, breadboard (nếu cần)
+
+───────────────────────────────────────────────────────────────────────────────
+
+SƠ ĐỒ NỐI DÂY ARDUINO UNO R3:
+───────────────────────────────────────────────────────────────────────────────
+
+1. BUTTON DIP (6x6x10MM) - Barrier Control:
+───────────────────────────────────────────────────────────────────────────────
+   Button Pin 1 ──┬── GND
+                  │
+   Button Pin 2 ──┼── Digital Pin 2 (Arduino)
+                  │   (Sử dụng INPUT_PULLUP - không cần resistor ngoài)
+                  │
+                  └── (Nếu muốn dùng external pull-up: nối qua 10kΩ lên 5V)
+
+   LƯU Ý: Arduino có internal pull-up, nên khi button không nhấn = HIGH,
+          khi nhấn = LOW (nối GND).
+
+───────────────────────────────────────────────────────────────────────────────
+
+2. SRF05 ULTRASONIC SENSOR - Slot 1:
+───────────────────────────────────────────────────────────────────────────────
+   SRF05 VCC  ── 5V (Arduino)
+   SRF05 GND  ── GND (Arduino)
+   SRF05 TRIG ── Digital Pin 9 (Arduino)
+   SRF05 ECHO ── Digital Pin 10 (Arduino)
+
+───────────────────────────────────────────────────────────────────────────────
+
+3. SERVO MOTOR SG90 - Barrier:
+───────────────────────────────────────────────────────────────────────────────
+   Servo Red (VCC)   ── 5V (Arduino)
+   Servo Brown (GND) ── GND (Arduino)
+   Servo Orange (Signal) ── Digital Pin 5 (Arduino - PWM)
+
+   LƯU Ý: Nếu servo cần nhiều dòng, nên dùng nguồn ngoài và nối chung GND.
+
+───────────────────────────────────────────────────────────────────────────────
+
+4. LCD 1602 I2C:
+───────────────────────────────────────────────────────────────────────────────
+   LCD VCC ── 5V (Arduino)
+   LCD GND ── GND (Arduino)
+   LCD SDA ── A4 (Arduino - I2C SDA)
+   LCD SCL ── A5 (Arduino - I2C SCL)
+
+   LƯU Ý: 
+   - I2C address mặc định thường là 0x27 hoặc 0x3F
+   - Kiểm tra address: Upload code I2C scanner hoặc dùng i2cdetect trên Pi
+   - Nếu không hiển thị, kiểm tra jumper trên module I2C (có thể cần điều chỉnh)
+
+───────────────────────────────────────────────────────────────────────────────
+
+5. LED STATUS (3 LED: Xanh lá, Vàng, Đỏ):
+───────────────────────────────────────────────────────────────────────────────
+   LED XANH LÁ:
+     Anode (dài) ── Resistor 220Ω ── Digital Pin 4 (Arduino)
+     Cathode (ngắn) ── GND
+
+   LED VÀNG:
+     Anode (dài) ── Resistor 220Ω ── Digital Pin 6 (Arduino)
+     Cathode (ngắn) ── GND
+
+   LED ĐỎ:
+     Anode (dài) ── Resistor 220Ω ── Digital Pin 7 (Arduino)
+     Cathode (ngắn) ── GND
+
+   LƯU Ý:
+   - Anode (cực dương) dài hơn, Cathode (cực âm) ngắn hơn
+   - Nếu không chắc, dùng đồng hồ đo hoặc thử (LED không hỏng nếu nối ngược)
+   - Resistor 220Ω bảo vệ LED khỏi quá dòng
+
+───────────────────────────────────────────────────────────────────────────────
+
+6. SERIAL COMMUNICATION (Arduino ↔ Raspberry Pi):
+───────────────────────────────────────────────────────────────────────────────
+   Arduino USB ── Raspberry Pi USB Port
+   
+   LƯU Ý:
+   - Kết nối qua cáp USB
+   - Trên Pi, port thường là /dev/ttyACM0 hoặc /dev/ttyUSB0
+   - Kiểm tra: ls /dev/ttyACM* /dev/ttyUSB*
+   - Baud rate: 115200
+
+───────────────────────────────────────────────────────────────────────────────
+
+TÓM TẮT PIN ARDUINO:
+───────────────────────────────────────────────────────────────────────────────
+Digital Pin 2  ── Button DIP
+Digital Pin 4  ── LED Xanh lá (qua resistor 220Ω)
+Digital Pin 5  ── Servo SG90 (PWM)
+Digital Pin 6  ── LED Vàng (qua resistor 220Ω)
+Digital Pin 7  ── LED Đỏ (qua resistor 220Ω)
+Digital Pin 9  ── SRF05 TRIG
+Digital Pin 10 ── SRF05 ECHO
+A4 (SDA)       ── LCD I2C SDA
+A5 (SCL)       ── LCD I2C SCL
+5V             ── SRF05 VCC, Servo VCC, LCD VCC
+GND            ── Tất cả GND chung
+
+───────────────────────────────────────────────────────────────────────────────
+
+KIỂM TRA SAU KHI NỐI DÂY:
+───────────────────────────────────────────────────────────────────────────────
+
+1. Button:
+   - Upload code test button (Serial Monitor)
+   - Nhấn button → Serial hiển thị "Button pressed"
+
+2. SRF05:
+   - Upload code test sensor
+   - Serial Monitor hiển thị khoảng cách (cm)
+   - Đưa tay trước sensor → khoảng cách thay đổi
+
+3. Servo:
+   - Upload code test servo
+   - Servo quay khi có lệnh
+   - Kiểm tra góc mở/đóng (0° và 90°)
+
+4. LCD:
+   - Upload code test LCD
+   - LCD hiển thị text
+   - Nếu không hiển thị: kiểm tra I2C address, wiring, contrast
+
+5. LED:
+   - Upload code test LED
+   - Từng LED sáng khi được kích hoạt
+   - Kiểm tra màu sắc đúng
+
+───────────────────────────────────────────────────────────────────────────────
+
+LƯU Ý AN TOÀN:
+───────────────────────────────────────────────────────────────────────────────
+
+1. Tắt nguồn trước khi nối/rút dây
+2. Kiểm tra cực tính LED (anode/cathode)
+3. Servo cần đủ dòng → dùng nguồn ngoài nếu cần
+4. Resistor cho LED là bắt buộc (tránh cháy LED)
+5. GND chung cho tất cả thiết bị
+6. Không nối trực tiếp 5V vào pin digital (chỉ output)
+
+───────────────────────────────────────────────────────────────────────────────
+
+TROUBLESHOOTING:
+───────────────────────────────────────────────────────────────────────────────
+
+Vấn đề: Button không hoạt động
+→ Kiểm tra: wiring, pull-up resistor, code debounce
+
+Vấn đề: SRF05 không đọc được
+→ Kiểm tra: VCC/GND, TRIG/ECHO, khoảng cách (2-400cm), timeout
+
+Vấn đề: Servo không quay
+→ Kiểm tra: VCC/GND, signal pin, góc quay (0-180°), nguồn đủ dòng
+
+Vấn đề: LCD không hiển thị
+→ Kiểm tra: I2C address, wiring SDA/SCL, contrast, backlight
+
+Vấn đề: LED không sáng
+→ Kiểm tra: cực tính, resistor, pin number, code logic
+
+───────────────────────────────────────────────────────────────────────────────
+

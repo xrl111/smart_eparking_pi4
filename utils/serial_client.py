@@ -42,6 +42,8 @@ class SerialJSONClient:
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._serial: Optional["serial.Serial"] = None
+        self._is_connected = False
+        self._last_received = None  # Track last received data time
 
     def add_listener(self, callback: PayloadCallback) -> None:
         self._listeners.append(callback)
@@ -65,12 +67,13 @@ class SerialJSONClient:
         if self._serial:
             self._serial.close()
 
-    def send_command(self, command: str) -> bool:
+    def send_command(self, command: str, retry: int = 2) -> bool:
         """
-        Gửi command xuống Arduino.
+        Gửi command xuống Arduino với retry mechanism.
         
         Args:
             command: Command string (ví dụ: "MODE:AUTO", "GATE:OPEN")
+            retry: Số lần retry nếu thất bại
         
         Returns:
             True nếu gửi thành công, False nếu lỗi
@@ -83,14 +86,31 @@ class SerialJSONClient:
             logger.warning("Serial chưa kết nối, không thể gửi command: %s", command)
             return False
 
-        try:
-            cmd_bytes = (command + "\n").encode("utf-8")
-            self._serial.write(cmd_bytes)
-            logger.debug("Đã gửi command xuống Arduino: %s", command)
-            return True
-        except Exception as exc:
-            logger.error("Lỗi khi gửi command '%s': %s", command, exc)
-            return False
+        for attempt in range(retry + 1):
+            try:
+                cmd_bytes = (command + "\n").encode("utf-8")
+                self._serial.write(cmd_bytes)
+                self._serial.flush()  # Đảm bảo data được gửi ngay
+                logger.debug("Đã gửi command xuống Arduino: %s (attempt %d)", command, attempt + 1)
+                return True
+            except Exception as exc:
+                if attempt < retry:
+                    logger.warning("Lỗi khi gửi command '%s' (attempt %d/%d): %s. Retrying...", 
+                                 command, attempt + 1, retry + 1, exc)
+                    time.sleep(0.1)
+                else:
+                    logger.error("Lỗi khi gửi command '%s' sau %d lần thử: %s", command, retry + 1, exc)
+                    return False
+        
+        return False
+    
+    def is_connected(self) -> bool:
+        """Kiểm tra xem có kết nối với Arduino không."""
+        return self._is_connected and self._serial is not None and self._serial.is_open
+    
+    def get_last_received_time(self) -> Optional[float]:
+        """Lấy thời gian nhận dữ liệu cuối cùng."""
+        return self._last_received
 
     # ------------------------------------------------------------------
     def _run_serial(self) -> None:
@@ -102,13 +122,19 @@ class SerialJSONClient:
                     self._serial = serial.Serial(
                         self.port, self.baudrate, timeout=self.timeout
                     )
+                    self._is_connected = True
+                    logger.info("Đã kết nối thành công tới Arduino")
 
                 line = self._serial.readline().decode("utf-8").strip()
                 if not line:
                     continue
+                
+                self._last_received = time.time()
                 self._handle_line(line)
             except (serial.SerialException, OSError) as exc:  # pragma: no cover
-                logger.warning("Serial lỗi: %s. Thử lại sau %.1fs", exc, self.reconnect_interval)
+                if self._is_connected:
+                    logger.warning("Mất kết nối với Arduino: %s. Thử lại sau %.1fs", exc, self.reconnect_interval)
+                    self._is_connected = False
                 if self._serial:
                     try:
                         self._serial.close()

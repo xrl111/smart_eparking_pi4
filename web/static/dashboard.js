@@ -15,6 +15,8 @@ const gateStatusCard = document.getElementById('gate-status-card');
 let lastUpdateTime = null;
 let connectionStatus = 'connecting';
 let updateInterval = null;
+let fetchErrorCount = 0;
+const MAX_FETCH_ERRORS = 3;
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -81,7 +83,7 @@ async function fetchStatus() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const res = await fetch('/status', {
+    const res = await fetch('/api/status', {
       signal: controller.signal,
       headers: {
         'Cache-Control': 'no-cache',
@@ -96,12 +98,24 @@ async function fetchStatus() {
 
     const data = await res.json();
     render(data);
-    updateConnectionStatus('online');
+    
+    // Update connection status
+    if (data.arduino_connected) {
+      updateConnectionStatus('online');
+      if (data.arduino_update_age && data.arduino_update_age > 10) {
+        showToast(`⚠️ Arduino không cập nhật trong ${Math.round(data.arduino_update_age)}s`, 'warning');
+      }
+    } else {
+      updateConnectionStatus('offline');
+      showToast('⚠️ Mất kết nối với Arduino', 'error');
+    }
+    
     lastUpdateTime = data.last_update;
 
     return data;
   } catch (err) {
     console.error('Lỗi khi lấy dữ liệu:', err);
+    fetchErrorCount++;
     updateConnectionStatus('offline');
 
     if (err.name === 'AbortError') {
@@ -114,12 +128,24 @@ async function fetchStatus() {
     if (errorsList) {
       errorsList.innerHTML = `
         <li style="color: #b91c1c;">
-          ⚠️ Lỗi kết nối: ${err.message}. Đang thử lại...
+          ⚠️ Lỗi kết nối: ${err.message}. Đang thử lại... (${fetchErrorCount}/${MAX_FETCH_ERRORS})
         </li>
       `;
     }
 
+    // Exponential backoff: tăng delay khi có nhiều lỗi
+    if (fetchErrorCount >= MAX_FETCH_ERRORS) {
+      const backoffDelay = Math.min(5000 * Math.pow(2, fetchErrorCount - MAX_FETCH_ERRORS), 30000);
+      console.warn(`Backoff: đợi ${backoffDelay}ms trước khi retry`);
+      await new Promise(resolve => setTimeout(resolve, backoffDelay));
+    }
+
     return null;
+  } finally {
+    // Reset error count khi thành công
+    if (fetchErrorCount > 0) {
+      fetchErrorCount = 0;
+    }
   }
 }
 
@@ -135,7 +161,7 @@ function render(data) {
     freeSlotsEl.textContent = data.free || 0;
   }
 
-  const totalSlots =
+  const totalSlots = data.total_slots || 
     parseInt(document.getElementById('total-slots')?.textContent) || 3;
   const usageRate = calculateUsageRate(data.free || 0, totalSlots);
 
@@ -155,20 +181,62 @@ function render(data) {
     }`;
   }
 
+  // Update Arduino connection status
+  if (data.arduino_connected !== undefined) {
+    const arduinoStatusEl = document.getElementById('arduino-status');
+    if (arduinoStatusEl) {
+      if (data.arduino_connected) {
+        arduinoStatusEl.innerHTML = `
+          <span style="color: #22c55e;">●</span> Arduino: Kết nối
+          ${data.arduino_update_age ? ` (${Math.round(data.arduino_update_age)}s trước)` : ''}
+        `;
+      } else {
+        arduinoStatusEl.innerHTML = `
+          <span style="color: #ef4444;">●</span> Arduino: Mất kết nối
+        `;
+      }
+    }
+  }
+
   // Update last update time
   if (lastUpdateEl && data.last_update) {
     lastUpdateEl.textContent = formatTime(data.last_update);
   }
 
-  // Render slots
+  // Render slots với manual control cho Slot 2,3
   if (slotsContainer && data.slots) {
     slotsContainer.innerHTML = '';
     data.slots.forEach((status, idx) => {
+      const slotId = idx + 1;
       const el = document.createElement('div');
       el.className = `slot ${status ? 'occupied' : 'free'}`;
+      
+      // Slot 1: từ sensor (không có manual control)
+      // Slot 2,3: có manual control
+      let controlsHTML = '';
+      if (slotId > 1) {
+        controlsHTML = `
+          <div class="slot-controls" style="margin-top: 8px;">
+            <button onclick="manualSlot(${slotId}, false)" class="btn btn-sm btn-success" style="margin-right: 4px;">
+              Đánh dấu trống
+            </button>
+            <button onclick="manualSlot(${slotId}, true)" class="btn btn-sm btn-danger">
+              Đánh dấu có xe
+            </button>
+          </div>
+        `;
+      } else {
+        controlsHTML = '<span style="color: #6b7280; font-size: 0.85rem;">(Tự động từ sensor)</span>';
+      }
+      
       el.innerHTML = `
-        <span>🚗 Slot ${idx + 1}</span>
-        <strong>${status ? 'ĐANG ĐỖ' : 'TRỐNG'}</strong>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <span>🚗 Slot ${slotId}</span>
+            <strong style="margin-left: 8px;">${status ? 'ĐANG ĐỖ' : 'TRỐNG'}</strong>
+          </div>
+        </div>
+        ${controlsHTML}
       `;
       slotsContainer.appendChild(el);
     });
@@ -202,7 +270,13 @@ async function manualGate(state) {
   }
 
   try {
-    const res = await fetch(`/api/gate?state=${state}`, { method: 'POST' });
+    const res = await fetch('/api/gate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ state: state }),
+    });
     const data = await res.json();
 
     if (res.ok) {
@@ -210,6 +284,10 @@ async function manualGate(state) {
         `Barrier đã được ${state === 'open' ? 'mở' : 'đóng'} thành công!`,
         'success'
       );
+      // Notification cho web
+      if (window.Notification && Notification.permission === 'granted') {
+        new Notification(`Barrier ${state === 'open' ? 'đã mở' : 'đã đóng'}`);
+      }
       fetchStatus();
     } else {
       const errorMsg = data.error || 'Không thể điều khiển barrier';
@@ -232,20 +310,28 @@ async function manualGate(state) {
   }
 }
 
-async function manualSlot(index, occupied) {
+async function manualSlot(slotId, occupied) {
   try {
-    const res = await fetch(`/api/slot?index=${index}&occupied=${occupied}`, {
+    const res = await fetch(`/api/slot/${slotId}`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ occupied: occupied }),
     });
     const data = await res.json();
 
     if (res.ok) {
       showToast(
-        `Slot ${index + 1} đã được đặt thành: ${
-          occupied ? 'OCCUPIED' : 'FREE'
+        `Slot ${slotId} đã được đặt thành: ${
+          occupied ? 'CÓ XE' : 'TRỐNG'
         }`,
         'success'
       );
+      // Notification cho web
+      if (window.Notification && Notification.permission === 'granted') {
+        new Notification(`Slot ${slotId} ${occupied ? 'có xe' : 'trống'}`);
+      }
       fetchStatus();
     } else {
       const errorMsg = data.error || 'Không thể đặt slot';
@@ -263,7 +349,8 @@ async function manualSlot(index, occupied) {
   }
 }
 
-async function manualBuzzer(duration = 0.2) {
+// Buzzer đã được loại bỏ, thay bằng web notifications
+// async function manualBuzzer(duration = 0.2) {
   const btn = event?.target;
   if (btn) {
     btn.disabled = true;
@@ -311,10 +398,9 @@ function setupManualControls() {
     btnGateClose.addEventListener('click', () => manualGate('closed'));
   }
 
-  // Buzzer control
-  const btnBuzzer = document.getElementById('btn-buzzer');
-  if (btnBuzzer) {
-    btnBuzzer.addEventListener('click', () => manualBuzzer(0.5));
+  // Request notification permission
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
   }
 
   // Refresh button

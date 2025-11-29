@@ -48,6 +48,22 @@ def init_main_routes(app, state_manager: StateManager, controller=None):
             mode_info = controller.mode_manager.get_mode_info()
             snapshot.update(mode_info)
         
+        # Thêm thông tin kết nối Arduino
+        if controller and hasattr(controller, 'serial_client'):
+            serial_client = controller.serial_client
+            snapshot['arduino_connected'] = serial_client.is_connected()
+            last_received = serial_client.get_last_received_time()
+            if last_received:
+                from datetime import UTC, datetime
+                import time
+                time_since = time.time() - last_received
+                snapshot['arduino_last_update'] = datetime.now(UTC).isoformat()
+                snapshot['arduino_update_age'] = round(time_since, 1)  # seconds
+            else:
+                snapshot['arduino_connected'] = False
+                snapshot['arduino_last_update'] = None
+                snapshot['arduino_update_age'] = None
+        
         return jsonify(snapshot)
 
     @main_bp.route("/api/my-sessions")
@@ -274,6 +290,64 @@ def init_main_routes(app, state_manager: StateManager, controller=None):
                 "message": f"Đã chuyển sang chế độ {mode.upper()}",
             })
         return jsonify({"error": "Failed to change mode"}), 500
+
+    # ============================================
+    # MANUAL CONTROL API (Admin only)
+    # ============================================
+    
+    @main_bp.route("/api/gate", methods=["POST"])
+    @login_required
+    def api_control_gate():
+        """Điều khiển barrier thủ công (admin only, MANUAL mode)."""
+        if not current_user.is_admin():
+            return jsonify({"error": "Chỉ admin mới có quyền điều khiển barrier"}), 403
+        
+        if not controller:
+            return jsonify({"error": "Controller not available"}), 503
+        
+        data = request.get_json() or {}
+        state = data.get("state", "").lower()
+        
+        if state not in ("open", "closed"):
+            return jsonify({"error": "Invalid state. Use 'open' or 'closed'"}), 400
+        
+        success = controller.manual_set_gate(state)
+        if success:
+            return jsonify({
+                "status": "ok",
+                "message": f"Đã {'mở' if state == 'open' else 'đóng'} barrier",
+            })
+        return jsonify({"error": "Không thể điều khiển barrier. Kiểm tra chế độ hoạt động."}), 400
+    
+    @main_bp.route("/api/slot/<int:slot_id>", methods=["POST"])
+    @login_required
+    def api_control_slot(slot_id: int):
+        """Điều khiển slot thủ công (admin only, MANUAL mode)."""
+        if not current_user.is_admin():
+            return jsonify({"error": "Chỉ admin mới có quyền điều khiển slot"}), 403
+        
+        if not controller:
+            return jsonify({"error": "Controller not available"}), 503
+        
+        # Slot 1 không thể set manual (từ sensor)
+        if slot_id == 1:
+            return jsonify({"error": "Slot 1 được điều khiển bởi sensor, không thể set manual"}), 400
+        
+        # Chỉ cho phép Slot 2, 3
+        if slot_id < 2 or slot_id > ParkingConfig.TOTAL_SLOTS:
+            return jsonify({"error": f"Slot {slot_id} không hợp lệ. Chỉ có thể set Slot 2, 3"}), 400
+        
+        data = request.get_json() or {}
+        occupied = data.get("occupied", False)
+        
+        # slot_id từ URL là 1-based (1,2,3), convert sang 0-based index
+        success = controller.manual_set_slot(slot_id - 1, occupied)
+        if success:
+            return jsonify({
+                "status": "ok",
+                "message": f"Đã đặt Slot {slot_id} = {'có xe' if occupied else 'trống'}",
+            })
+        return jsonify({"error": "Không thể điều khiển slot. Kiểm tra chế độ hoạt động."}), 400
 
     # ============================================
     # PRICING RULES API (Admin only)
